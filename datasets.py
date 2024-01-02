@@ -45,6 +45,9 @@ def get_halo_data(
     elif simulation_set == "fiducial":
         x = np.load(data_dir / f"{split}_halos_fiducial.npy")
         conditioning = None
+    elif simulation_set == "camels":
+        x = np.load(data_dir / f"{split}_halos_camels.npy")
+        conditioning = pd.read_csv(data_dir / f"{split}_conditioning_camels.csv")
     else:
         raise NotImplementedError(
             f"{simulation_set} does not exist as a simulation set"
@@ -54,6 +57,7 @@ def get_halo_data(
     if n_features == 7:
         x = x.at[:, :, -1].set(np.log10(x[:, :, -1]))  # Use log10(mass)
     x = x[:, :n_particles, :n_features]
+
     return x, conditioning
 
 
@@ -64,7 +68,7 @@ def get_nbody_data(
     simulation_set: str = "lhc",
     conditioning_parameters: list = ["Omega_m", "sigma_8"],
 ):
-    DATA_DIR = Path("/n/holystore01/LABS/iaifi_lab/Lab/set-diffuser-data/")
+    DATA_DIR = Path("/mnt/ceph/users/tnguyen/CAMELS-datasets/camels_processed")
     x, conditioning = get_halo_data(
         data_dir=DATA_DIR,
         n_features=n_features,
