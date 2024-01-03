@@ -16,12 +16,15 @@ from models.graph_utils import get_rotated_box
 EPS = 1e-7
 
 
-def make_dataloader(x, conditioning, mask, batch_size, seed, shuffle=True):
+def make_dataloader(
+    x, conditioning, mask, batch_size, seed,
+    shuffle=True, repeat=True):
     n_train = len(x)
 
     train_ds = tf.data.Dataset.from_tensor_slices((x, conditioning, mask))
     train_ds = train_ds.cache()
-    train_ds = train_ds.repeat()
+    if repeat:
+        train_ds = train_ds.repeat()
 
     batch_dims = [jax.local_device_count(), batch_size // jax.device_count()]
 
@@ -106,6 +109,7 @@ def nbody_dataset(
     seed,
     split: str = "train",
     shuffle: bool = True,
+    repeat: bool = True,
     conditioning_parameters: list = ["Omega_m", "sigma_8"],
 ):
     x, mask, conditioning, norm_dict = get_nbody_data(
@@ -123,13 +127,14 @@ def nbody_dataset(
         batch_size,
         seed,
         shuffle=shuffle,
+        repeat=repeat
     )
     return ds, norm_dict
 
 
 def load_data(
     dataset, dataset_root, dataset_name, n_features, n_particles,
-    batch_size, seed, shuffle, split, **kwargs
+    batch_size, seed, shuffle, split, repeat=True, **kwargs
 ):
     if dataset == "nbody":
         train_ds, norm_dict = nbody_dataset(
@@ -140,6 +145,7 @@ def load_data(
             batch_size,
             seed,
             shuffle=shuffle,
+            repeat=repeat,
             split=split,
             **kwargs,
         )
