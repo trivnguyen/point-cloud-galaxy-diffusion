@@ -1,3 +1,8 @@
+
+from typing import Optional
+
+import os
+
 import tensorflow as tf
 import time
 import jax
@@ -29,31 +34,24 @@ def make_dataloader(x, conditioning, mask, batch_size, seed, shuffle=True):
 
 
 def get_halo_data(
-    data_dir,
+    dataset_root,
+    dataset_name,
     n_features,
     n_particles,
     split: str = "train",
-    simulation_set: str = "lhc",
-    conditioning_parameters: list = ["Omega_m", "sigma_8"],
+    conditioning_parameters: Optional[list] = None,
 ):
-    if simulation_set == "lhc":
-        x = np.load(data_dir / f"{split}_halos.npy")
-        conditioning = pd.read_csv(data_dir / f"{split}_cosmology.csv")
-    elif simulation_set == "lhc+fiducial":
-        x = np.load(data_dir / f"{split}_halos_combined.npy")
-        conditioning = pd.read_csv(data_dir / f"{split}_cosmology_combined.csv")
-    elif simulation_set == "fiducial":
-        x = np.load(data_dir / f"{split}_halos_fiducial.npy")
-        conditioning = None
-    elif simulation_set == "camels":
-        x = np.load(data_dir / f"{split}_halos_camels.npy")
-        conditioning = pd.read_csv(data_dir / f"{split}_conditioning_camels.csv")
-    else:
-        raise NotImplementedError(
-            f"{simulation_set} does not exist as a simulation set"
-        )
-    if conditioning is not None:
+    # read in the data
+    dataset_path = os.path.join(dataset_root, f"{dataset_name}_{split}.npy")
+    x = np.load(dataset_path)
+
+    # read in the conditioning parameters
+    if conditioning_parameters is not None:
+        conditioning_path = os.path.join(
+            dataset_root, f"{dataset_name}_conditioning_{split}.csv")
+        conditioning = pd.read_csv(conditioning_path)
         conditioning = np.array(conditioning[conditioning_parameters].values)
+
     if n_features == 7:
         x = x.at[:, :, -1].set(np.log10(x[:, :, -1]))  # Use log10(mass)
     x = x[:, :n_particles, :n_features]
@@ -62,30 +60,30 @@ def get_halo_data(
 
 
 def get_nbody_data(
+    dataset_root,
+    dataset_name,
     n_features,
     n_particles,
     split: str = "train",
-    simulation_set: str = "lhc",
-    conditioning_parameters: list = ["Omega_m", "sigma_8"],
+    conditioning_parameters: Optional[list] = None,
 ):
-    DATA_DIR = Path("/mnt/ceph/users/tnguyen/CAMELS-datasets/camels_processed")
     x, conditioning = get_halo_data(
-        data_dir=DATA_DIR,
+        dataset_root,
+        dataset_name,
         n_features=n_features,
         n_particles=n_particles,
         split=split,
-        simulation_set=simulation_set,
         conditioning_parameters=conditioning_parameters,
     )
     if split == "train":
         x_train = x
     else:
         x_train, _ = get_halo_data(
-            data_dir=DATA_DIR,
+            dataset_root,
+            dataset_name,
             n_features=n_features,
             n_particles=n_particles,
             split="train",
-            simulation_set=simulation_set,
         )
     # Standardize per-feature (over datasets and particles)
     x_mean = x_train.mean(axis=(0, 1))
@@ -100,20 +98,22 @@ def get_nbody_data(
 
 
 def nbody_dataset(
+    dataset_root,
+    dataset_name,
     n_features,
     n_particles,
     batch_size,
     seed,
     split: str = "train",
     shuffle: bool = True,
-    simulation_set: str = "lhc",
     conditioning_parameters: list = ["Omega_m", "sigma_8"],
 ):
     x, mask, conditioning, norm_dict = get_nbody_data(
+        dataset_root,
+        dataset_name,
         n_features,
         n_particles,
         split=split,
-        simulation_set=simulation_set,
         conditioning_parameters=conditioning_parameters,
     )
     ds = make_dataloader(
@@ -128,10 +128,13 @@ def nbody_dataset(
 
 
 def load_data(
-    dataset, n_features, n_particles, batch_size, seed, shuffle, split, **kwargs
+    dataset, dataset_root, dataset_name, n_features, n_particles,
+    batch_size, seed, shuffle, split, **kwargs
 ):
     if dataset == "nbody":
         train_ds, norm_dict = nbody_dataset(
+            dataset_root,
+            dataset_name,
             n_features,
             n_particles,
             batch_size,

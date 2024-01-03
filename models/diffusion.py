@@ -109,12 +109,15 @@ class VariationalDiffusionModel(nn.Module):
         if norm_dict is None:
             _, norm_dict = load_data(
                 config.data.dataset,
+                config.data.dataset_root,
+                config.data.dataset_name,
                 config.data.n_features,
                 config.data.n_particles,
                 config.training.batch_size,
                 config.seed,
                 shuffle=True,
                 split="train",
+                conditioning_parameters=config.data.conditioning_parameters,
             )
         x_mean = tuple(map(float, norm_dict["mean"]))
         x_std = tuple(map(float, norm_dict["std"]))
@@ -151,7 +154,8 @@ class VariationalDiffusionModel(nn.Module):
                 config.data.n_features,
             ),
         )
-        conditioning_dummy = jax.random.normal(rng, (config.training.batch_size, 2))
+        conditioning_dummy = jax.random.normal(
+            rng, (config.training.batch_size, len(config.data.conditioning_parameters)))
         mask_dummy = np.ones((config.training.batch_size, config.data.n_particles))
         _, params = vdm.init_with_output(
             {"sample": rng, "params": rng}, x_dummy, conditioning_dummy, mask_dummy
