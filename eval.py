@@ -640,9 +640,9 @@ def generate_samples(
     generated_samples = generated_samples.mean()
     generated_samples = generated_samples * norm_dict["std"] + norm_dict["mean"]
     # make sure generated samples are inside boxsize
-    generated_samples = generated_samples.at[..., :3].set(
-        generated_samples[..., :3] % boxsize
-    )
+    # generated_samples = generated_samples.at[..., :3].set(
+        # generated_samples[..., :3] % boxsize
+    # )
     return generated_samples
 
 
