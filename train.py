@@ -72,7 +72,6 @@ def train(
     )
     # Load the dataset
     train_ds, norm_dict = load_data(
-        config.data.dataset,
         config.data.dataset_root,
         config.data.dataset_name,
         config.data.n_features,
@@ -91,7 +90,7 @@ def train(
 
     batches = create_input_iter(train_ds)
 
-    logging.info("Loaded the %s dataset", config.data.dataset)
+    logging.info("Loaded the %s dataset", config.data.dataset_name)
 
     ## Model configuration
 

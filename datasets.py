@@ -36,69 +36,39 @@ def make_dataloader(
     return train_ds
 
 
-def get_halo_data(
-    dataset_root,
-    dataset_name,
-    n_features,
-    n_particles,
-    split: str = "train",
-    conditioning_parameters: Optional[list] = None,
-):
-    # read in the data
-    dataset_path = os.path.join(dataset_root, f"{dataset_name}_{split}.npy")
-    x = np.load(dataset_path)
-
-    # read in the conditioning parameters
-    if conditioning_parameters is not None:
-        conditioning_path = os.path.join(
-            dataset_root, f"{dataset_name}_conditioning_{split}.csv")
-        conditioning = pd.read_csv(conditioning_path)
-        conditioning = np.array(conditioning[conditioning_parameters].values)
-
-    if n_features == 7:
-        x = x.at[:, :, -1].set(np.log10(x[:, :, -1]))  # Use log10(mass)
-    x = x[:, :n_particles, :n_features]
-
-    return x, conditioning
-
-
 def get_nbody_data(
     dataset_root,
     dataset_name,
     n_features,
     n_particles,
-    split: str = "train",
+    norm_dict=None,
     conditioning_parameters: Optional[list] = None,
 ):
-    x, conditioning = get_halo_data(
-        dataset_root,
-        dataset_name,
-        n_features=n_features,
-        n_particles=n_particles,
-        split=split,
-        conditioning_parameters=conditioning_parameters,
-    )
-    if split == "train":
-        x_train = x
-    else:
-        x_train, _ = get_halo_data(
-            dataset_root,
-            dataset_name,
-            n_features=n_features,
-            n_particles=n_particles,
-            split="train",
+    # read in the dataset and mask
+    x = np.load(os.path.join(dataset_root, f"{dataset_name}_feat.npy"))
+    x = x[:, :n_particles, :n_features]
+    mask = np.load(os.path.join(dataset_root, f"{dataset_name}_mask.npy"))
+    mask = mask[:, :n_particles]
+
+    # read in the conditioning parameters
+    if conditioning_parameters is not None:
+        conditioning = pd.read_csv(
+            os.path.join(dataset_root, f"{dataset_name}_cond.csv")
         )
+        conditioning = np.array(conditioning[conditioning_parameters].values)
+
     # Standardize per-feature (over datasets and particles)
-    x_mean = x_train.mean(axis=(0, 1))
-    x_std = x_train.std(axis=(0, 1))
-    norm_dict = {"mean": x_mean, "std": x_std}
-    # if conditioning is not None:
-    #    conditioning = conditioning[:, [0, -1]]  # Select only omega_m and sigma_8
-    mask = np.ones((x.shape[0], n_particles))  # No mask
+    if norm_dict is None:
+        x_mean = x.mean(axis=(0, 1))
+        x_std = x.std(axis=(0, 1))
+        norm_dict = {"mean": x_mean, "std": x_std}
+    else:
+        x_mean = norm_dict["mean"]
+        x_std = norm_dict["std"]
     x = (x - x_mean + EPS) / (x_std + EPS)
+
     # Finalize
     return x, mask, conditioning, norm_dict
-
 
 def nbody_dataset(
     dataset_root,
@@ -110,14 +80,13 @@ def nbody_dataset(
     split: str = "train",
     shuffle: bool = True,
     repeat: bool = True,
-    conditioning_parameters: list = ["Omega_m", "sigma_8"],
+    conditioning_parameters: list = None,
 ):
     x, mask, conditioning, norm_dict = get_nbody_data(
         dataset_root,
         dataset_name,
         n_features,
         n_particles,
-        split=split,
         conditioning_parameters=conditioning_parameters,
     )
     ds = make_dataloader(
@@ -133,24 +102,21 @@ def nbody_dataset(
 
 
 def load_data(
-    dataset, dataset_root, dataset_name, n_features, n_particles,
+    dataset_root, dataset_name, n_features, n_particles,
     batch_size, seed, shuffle, split, repeat=True, **kwargs
 ):
-    if dataset == "nbody":
-        train_ds, norm_dict = nbody_dataset(
-            dataset_root,
-            dataset_name,
-            n_features,
-            n_particles,
-            batch_size,
-            seed,
-            shuffle=shuffle,
-            repeat=repeat,
-            split=split,
-            **kwargs,
-        )
-    else:
-        raise ValueError("Unknown dataset: {}".format(dataset))
+    train_ds, norm_dict = nbody_dataset(
+        dataset_root,
+        dataset_name,
+        n_features,
+        n_particles,
+        batch_size,
+        seed,
+        shuffle=shuffle,
+        repeat=repeat,
+        split=split,
+        **kwargs,
+    )
 
     return train_ds, norm_dict
 
