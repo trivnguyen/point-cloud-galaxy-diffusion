@@ -23,7 +23,6 @@ from flax.training import checkpoints, common_utils, train_state
 
 import tensorflow as tf
 
-from eval import eval_generation, eval_likelihood
 from models.diffusion import VariationalDiffusionModel
 from models.diffusion_utils import loss_vdm
 from models.train_utils import (
@@ -230,12 +229,16 @@ def train(
                     wandb.log({"train/step": step, **summary})
 
             # Eval periodically
-            # if (
-            #     (step % config.training.eval_every_steps == 0)
-            #     and (step != 0)
-            #     and (jax.process_index() == 0)
-            #     and (config.wandb.log_train)
-            # ):
+            if (
+                (step % config.training.eval_every_steps == 0)
+                and (step != 0)
+                and (jax.process_index() == 0)
+                and (config.wandb.log_train)
+            ):
+                # pass for now because the eval code assumes Omega_m and sigma_8
+                # as conditioning parameters
+                pass
+
                 # if conditioning_batch is not None:
                 #     eval_likelihood(
                 #         vdm=vdm,
