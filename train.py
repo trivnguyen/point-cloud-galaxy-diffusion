@@ -1,35 +1,27 @@
 
-import sys
 import os
-import yaml
+import sys
 
-from absl import flags, logging
-import ml_collections
-from ml_collections import config_flags
-from clu import metric_writers
-import wandb
-
-from tqdm import trange
-
+import flax
 import jax
 import jax.numpy as np
+import ml_collections
 import optax
-import flax
+import tensorflow as tf
+import yaml
+from absl import flags, logging
+from clu import metric_writers
 from flax.core import FrozenDict
 from flax.training import checkpoints, common_utils, train_state
+from ml_collections import config_flags
+from tqdm import trange
 
-import tensorflow as tf
-
+import wandb
+from datasets import augment_data, load_data
 from models.diffusion import VariationalDiffusionModel
 from models.diffusion_utils import loss_vdm
-from models.train_utils import (
-    create_input_iter,
-    param_count,
-    train_step,
-    to_wandb_config,
-)
-
-from datasets import load_data, augment_data
+from models.train_utils import create_input_iter, param_count
+from models.train_utils import to_wandb_config, train_step
 
 replicate = flax.jax_utils.replicate
 unreplicate = flax.jax_utils.unreplicate
