@@ -17,7 +17,7 @@ EPS = 1e-7
 
 
 def make_dataloader(
-    x, conditioning, mask, batch_size, seed,
+    x, conditioning, mask, batch_size, seed=None,
     shuffle=True, repeat=True):
     n_train = len(x)
 

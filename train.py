@@ -1,16 +1,13 @@
+
 import sys
 import os
 import yaml
 
 from absl import flags, logging
-from absl import logging
 import ml_collections
 from ml_collections import config_flags
 from clu import metric_writers
 import wandb
-
-sys.path.append("./")
-sys.path.append("../")
 
 from tqdm import trange
 
