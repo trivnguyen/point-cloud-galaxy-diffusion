@@ -22,6 +22,7 @@ from datasets import load_data
 from models.train_utils import create_input_iter, param_count
 from models.train_utils import to_wandb_config
 from models.flows import nsf, maf
+from models.flows.train_utils import loss_flows
 
 logging.set_verbosity(logging.INFO)
 
@@ -149,14 +150,14 @@ def train_flows(
 
     logging.info("Starting training...")
 
-    # TODO: This is a
-    def loss_flows(params, x, context):
-        loss = -np.mean(model.apply(params, x, context))
-        return loss
+    # TODO: This is a temporary fix to get the training loop working with jit
+    # The flows model is not currently compatible with jit because some of the
+    # attributes are not hashable. Ideally, we want to use the version in
+    # models.flows.train_utils.train_step
     @jax.jit
     def train_step(state, batch):
         x, context = batch
-        loss, grads = jax.value_and_grad(loss_flows)(state.params, x, context)
+        loss, grads = jax.value_and_grad(loss_flows)(state.params, model, x, context)
         new_state = state.apply_gradients(grads=grads)
         metrics = {"loss": loss}
         return new_state, metrics
