@@ -1,13 +1,18 @@
 
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Union
 import dataclasses
+from pathlib import Path
 
+import yaml
 import jax
 import jax.numpy as jnp
 import numpy as np
+import optax
 import flax.linen as nn
 from flax.linen.module import compact
+from flax.training import train_state, checkpoints
 import distrax
+from ml_collections.config_dict import ConfigDict
 
 from .bijectors import InverseConditional, ChainConditional, TransformedConditional, MaskedCouplingConditional
 
@@ -57,6 +62,66 @@ class NeuralSplineFlow(nn.Module):
     range_max: float = 1.0
     event_shape: Optional[List[int]] = None
     context_shape: Optional[List[int]] = None
+
+    @classmethod
+    def from_path_to_model(
+        cls,
+        path_to_model: Union[str, Path],
+        checkpoint_step: int = None,
+    ) -> "NeuralSplineFlow":
+        """load model from path where it is stored
+
+        Args:
+            path_to_model (Union[str, Path]): path to model
+
+        Returns:
+            Tuple[NeuralSplineFlow, np.array]: model, params
+        """
+        with open(path_to_model / "config.yaml", "r") as file:
+            config = yaml.safe_load(file)
+        config = ConfigDict(config)
+
+        model = NeuralSplineFlow(
+            n_dim=config.flows.n_dim,
+            n_context=config.flows.n_context,
+            hidden_dims=config.flows.hidden_dims,
+            n_transforms=config.flows.n_transforms,
+            activation=config.flows.activation,
+            n_bins=config.flows.n_bins,
+            range_min=config.flows.range_min,
+            range_max=config.flows.range_max,
+        )
+
+        # initialize the model
+        key = jax.random.PRNGKey(42)
+        x_dummy = jax.random.uniform(key=key, shape=(64, config.flows.n_dim))
+        theta_dummy = jax.random.uniform(key=key, shape=(64, config.flows.n_context))
+        params = model.init(key, theta_dummy, x_dummy)
+
+        schedule = optax.warmup_cosine_decay_schedule(
+            init_value=0.0,
+            peak_value=config.optim.learning_rate,
+            warmup_steps=config.training.warmup_steps,
+            decay_steps=config.training.n_train_steps,
+        )
+        tx = optax.adamw(learning_rate=schedule, weight_decay=config.optim.weight_decay)
+        if hasattr(config.optim, "grad_clip"):
+            if config.optim.grad_clip is not None:
+                tx = optax.chain(
+                    optax.clip(config.optim.grad_clip),
+                    tx,
+                )
+
+        state = train_state.TrainState.create(apply_fn=model.apply, params=params, tx=tx)
+        # Training config and state
+        restored_state = checkpoints.restore_checkpoint(
+            ckpt_dir=path_to_model,
+            target=state,
+            step=checkpoint_step,
+        )
+        if state is restored_state:
+            raise FileNotFoundError(f"Did not load checkpoint correctly")
+        return model, restored_state.params
 
     def setup(self):
         def bijector_fn(params: Array):
