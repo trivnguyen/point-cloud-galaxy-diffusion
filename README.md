@@ -1,25 +1,34 @@
-# A point cloud approach to generative modeling for galaxy surveys at the field level
+# A point cloud approach to field level generative modeling<!-- omit from toc -->
 
-Carolina Cuesta-Lazaro and Siddharth Mishra-Sharma
+[Carolina Cuesta-Lazaro](mailto:cuestalz@mit.edu) and [Siddharth Mishra-Sharma](mailto:smsharma@mit.edu)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-red.svg)](https://opensource.org/licenses/MIT)
 [![arXiv](https://img.shields.io/badge/arXiv-2311.17141%20-green.svg)](https://arxiv.org/abs/2311.17141)
 
-![Figure.](notebooks/plots/diffusion_fig.png)
+![Figure-Light](notebooks/plots/diffusion_fig.png#gh-light-mode-only)
+![Figure-Dark](notebooks/plots/diffusion_fig_dark.png#gh-dark-mode-only)
+
+
+## Contents<!-- omit from toc -->
+
+- [Abstract](#abstract)
+- [Dependencies](#dependencies)
+- [Dataset](#dataset)
+- [Code overview](#code-overview)
+- [Running the code](#running-the-code)
+- [Diffusion model basic usage](#diffusion-model-basic-usage)
+- [Citation](#citation)
 
 ## Abstract
 
 We introduce a diffusion-based generative model to describe the distribution of galaxies in our Universe directly as a collection of points in 3-D space (coordinates) optionally with associated attributes (e.g., velocities and masses), without resorting to binning or voxelization. The custom diffusion model can be used both for emulation, reproducing essential summary statistics of the galaxy distribution, as well as inference, by computing the conditional likelihood of a galaxy field. We demonstrate a first application to massive dark matter haloes in the _Quijote_ simulation suite. This approach can be extended to enable a comprehensive analysis of cosmological data, circumventing limitations inherent to summary statistics- as well as neural simulation-based inference methods.
 
-- [A point cloud approach to generative modeling for galaxy surveys at the field level](#a-point-cloud-approach-to-generative-modeling-for-galaxy-surveys-at-the-field-level)
-  - [Abstract](#abstract)
-  - [Dependencies](#dependencies)
-  - [Dataset](#dataset)
-  - [Running the code](#running-the-code)
-  - [Diffusion model basic usage](#diffusion-model-basic-usage)
-  - [Citation](#citation)
-
 ## Dependencies
+
+The Python environment is defined in `environment.yml`. To create the environment run e.g.,
+``` sh
+mamba env create --file environment.yaml
+```
 
 For evaluation of the nbody dataset, `Corrfunc` is needed:
 ``` sh
@@ -29,6 +38,11 @@ python -m pip install git+https://github.com/cosmodesi/pycorr#egg=pycorr[corrfun
 ## Dataset
 
 The processed dark matter halo features from the _Quijote_ simulations used to train the model can be found [here](https://drive.google.com/drive/folders/16etX6fHLlJQqD9K_UIzAbiDFkSmAuIBu?usp=share_link). Make sure to update the hard-coded `DATA_DIR` in [`datasets.py`](datasets.py) to point to the location of the dataset before training.
+
+## Code overview
+
+- The diffusion model is defined in [`models/diffusion.py`](models/diffusion.py), with auxiliary utilities (loss, sampling, noise schedules) in [`models/diffusion_utils.py`](models/diffusion_utils.py). The model is based on the [google-research/vdm](https://github.com/google-research/vdm) repo.
+- Score models are called from [`models/score.py`](models/score.py), with the transformer model defined in [`models/transformer.py`](models/transformer.py) and the GNN model in [`models/gnn.py`](models/gnn.py).
 
 ## Running the code
 
@@ -75,11 +89,11 @@ x = jax.random.normal(rng, (32, 100, 4))  # Input set, (batch_size, max_set_size
 mask = jax.random.randint(rng, (32, 100), 0, 2)  # Optional set mask, (batch_size, max_set_size); can be `None`
 conditioning = jax.random.normal(rng, (32, 6))  # Optional conditioning context, (batch_size, context_size); can be `None`
 
-# Call to get losses; see https://blog.alexalemi.com/diffusion.html
+# Call to get losses
 (loss_diff, loss_klz, loss_recon), params = vdm.init_with_output({"sample": rng, "params": rng}, x, conditioning, mask)
 
 # Compute full loss, accounting for masking
-loss_vdm(params, vdm, rng, x, conditioning, mask)
+loss = loss_vdm(params, vdm, rng, x, conditioning, mask)
 
 # Sample from model
 
