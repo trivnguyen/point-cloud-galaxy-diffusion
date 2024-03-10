@@ -1,8 +1,7 @@
 
 import os
 import sys
-
-os.environ["JAX_TRACEBACK_FILTERING"] = "off"  # more detailed stack traces
+# os.environ["JAX_TRACEBACK_FILTERING"] = "off"  # more detailed stack traces
 
 import flax
 import jax
@@ -23,7 +22,6 @@ from datasets import load_data
 from models.train_utils import create_input_iter, param_count
 from models.train_utils import to_wandb_config
 from models.flows import nsf, maf
-from models.flows.train_utils import loss_flows, train_step
 
 logging.set_verbosity(logging.INFO)
 
@@ -94,7 +92,7 @@ def train_flows(
         config.data.dataset_name,
         config.data.n_features,
         config.data.n_particles,
-        config.training.batch_size,
+        config.flow_training.batch_size,
         config.seed,
         shuffle=True,
         split="train",
@@ -129,8 +127,8 @@ def train_flows(
         schedule = optax.warmup_cosine_decay_schedule(
             init_value=0.0,
             peak_value=config.optim.learning_rate,
-            warmup_steps=config.training.warmup_steps,
-            decay_steps=config.training.n_train_steps,
+            warmup_steps=config.flow_training.warmup_steps,
+            decay_steps=config.flow_training.n_train_steps,
         )
     elif config.optim.lr_schedule == "constant":
         schedule = optax.constant_schedule(config.optim.learning_rate)
@@ -151,51 +149,43 @@ def train_flows(
 
     logging.info("Starting training...")
 
+    # TODO: This is a
+    def loss_flows(params, x, context):
+        loss = -np.mean(model.apply(params, x, context))
+        return loss
+    @jax.jit
+    def train_step(state, batch):
+        x, context = batch
+        loss, grads = jax.value_and_grad(loss_flows)(state.params, x, context)
+        new_state = state.apply_gradients(grads=grads)
+        metrics = {"loss": loss}
+        return new_state, metrics
+
     train_metrics = []
-    with trange(config.training.n_train_steps) as steps:
+    with trange(config.flow_training.n_train_steps) as steps:
         for step in steps:
             _, conditioning, mask = next(batches)
             theta_batch = np.log10(np.sum(mask_batch, axis=2)).reshape(1, -1, 1)
             x_batch = conditioning_batch
 
             batch = (theta_batch[0], x_batch[0])
-            state, metrics = train_step(state, batch, model, loss_flows)
+            state, metrics = train_step(state, batch)
 
             steps.set_postfix(val=metrics["loss"])
             train_metrics.append(metrics)
 
-            # Log periodically
-            if (
-                (step % config.training.log_every_steps == 0)
-                and (step != 0)
-                and (jax.process_index() == 0)
-            ):
-                train_metrics = common_utils.get_metrics(train_metrics)
-                summary = {
-                    f"train/{k}": v
-                    for k, v in jax.tree_map(lambda x: x.mean(), train_metrics).items()
-                }
-
-                writer.write_scalars(step, summary)
-                train_metrics = []
-
-                if config.wandb.log_train:
-                    wandb.log({"train/step": step, **summary})
-
             # Eval periodically
             if (
-                (step % config.training.eval_every_steps == 0)
+                (step % config.flow_training.eval_every_steps == 0)
                 and (step != 0)
                 and (jax.process_index() == 0)
                 and (config.wandb.log_train)
             ):
-                # pass for now because the eval code assumes Omega_m and sigma_8
-                # as conditioning parameters
                 pass
 
             # Save checkpoints periodically
             if (
-                (step % config.training.save_every_steps == 0)
+                (step % config.flow_training.save_every_steps == 0)
                 and (step != 0)
                 and (jax.process_index() == 0)
             ):
