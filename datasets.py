@@ -43,6 +43,7 @@ def get_nbody_data(
     n_particles,
     norm_dict=None,
     conditioning_parameters: Optional[list] = None,
+    norm_conditioning: bool = False,
 ):
     # read in the dataset and mask
     x = np.load(os.path.join(dataset_root, f"{dataset_name}_feat.npy"))
@@ -61,11 +62,20 @@ def get_nbody_data(
     if norm_dict is None:
         x_mean = x.mean(axis=(0, 1))
         x_std = x.std(axis=(0, 1))
-        norm_dict = {"mean": x_mean, "std": x_std}
+        cond_mean = conditioning.mean(axis=0)
+        cond_std = conditioning.std(axis=0)
+        norm_dict = {
+            "mean": x_mean, "std": x_std,
+            "cond_mean": cond_mean, "cond_std": cond_std,
+        }
     else:
         x_mean = norm_dict["mean"]
         x_std = norm_dict["std"]
+        cond_mean = norm_dict.get("cond_mean", 0)
+        cond_std = norm_dict.get("cond_std", 1)
     x = (x - x_mean + EPS) / (x_std + EPS)
+    if norm_conditioning:
+        conditioning = (conditioning - cond_mean + EPS) / (cond_std + EPS)
 
     # Finalize
     return x, mask, conditioning, norm_dict
@@ -81,6 +91,7 @@ def nbody_dataset(
     shuffle: bool = True,
     repeat: bool = True,
     conditioning_parameters: list = None,
+    norm_conditioning: bool = False,
 ):
     x, mask, conditioning, norm_dict = get_nbody_data(
         dataset_root,
@@ -88,6 +99,7 @@ def nbody_dataset(
         n_features,
         n_particles,
         conditioning_parameters=conditioning_parameters,
+        norm_conditioning=norm_conditioning,
     )
     ds = make_dataloader(
         x,

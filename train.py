@@ -70,7 +70,7 @@ def train(
         shuffle=True,
         split="train",
         conditioning_parameters=config.data.conditioning_parameters,
-        # **config.data.kwargs,
+        norm_conditioning=config.data.get('norm_conditioning', False),
     )
 
     add_augmentations = (

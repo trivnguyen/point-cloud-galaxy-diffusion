@@ -88,6 +88,9 @@ def train_flows(
         logdir=workdir, just_logging=jax.process_index() != 0
     )
     # Load the dataset
+    conditioning_parameters = config.data.flow_conditioning_parameters + config.data.flow_labels
+    n_condition = len(config.data.flow_conditioning_parameters)
+    n_labels = len(config.data.flow_labels)
     train_ds, norm_dict = load_data(
         config.data.dataset_root,
         config.data.dataset_name,
@@ -97,7 +100,8 @@ def train_flows(
         config.seed,
         shuffle=True,
         split="train",
-        conditioning_parameters=config.data.conditioning_parameters,
+        conditioning_parameters=conditioning_parameters,
+        norm_conditioning=config.data.get("norm_conditioning", False),
     )
     batches = create_input_iter(train_ds)
 
@@ -111,9 +115,10 @@ def train_flows(
 
     # Pass a test batch through to initialize model
     # TODO: Make so we don't have to pass an entire batch (slow)
-    _, conditioning_batch, mask_batch = next(batches)
-    theta_batch = np.log10(np.sum(mask_batch, axis=2)).reshape(1, -1, 1)
-    x_batch = conditioning_batch
+    _, conditioning_batch, _ = next(batches)
+    # separate the conditioning parameters and labels
+    x_batch = conditioning_batch[..., :n_condition]
+    theta_batch = conditioning_batch[..., n_condition:]
     params = model.init(rng, theta_batch[0], x_batch[0])
 
     logging.info("Instantiated the model")
@@ -165,9 +170,9 @@ def train_flows(
     train_metrics = []
     with trange(config.flow_training.n_train_steps) as steps:
         for step in steps:
-            _, conditioning, mask = next(batches)
-            theta_batch = np.log10(np.sum(mask_batch, axis=2)).reshape(1, -1, 1)
-            x_batch = conditioning_batch
+            _, conditioning, _ = next(batches)
+            x_batch = conditioning_batch[..., :n_condition]
+            theta_batch = conditioning_batch[..., n_condition:]
 
             batch = (theta_batch[0], x_batch[0])
             state, metrics = train_step(state, batch)
