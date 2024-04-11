@@ -16,12 +16,10 @@ from models.graph_utils import get_rotated_box
 EPS = 1e-7
 
 
-def make_dataloader(
-    x, conditioning, mask, batch_size, seed=None,
-    shuffle=True, repeat=True):
-    n_train = len(x)
+def make_dataloader(data, batch_size, seed=None, shuffle=True, repeat=True):
+    n_train = len(data[0])
 
-    train_ds = tf.data.Dataset.from_tensor_slices((x, conditioning, mask))
+    train_ds = tf.data.Dataset.from_tensor_slices(data)
     train_ds = train_ds.cache()
     if repeat:
         train_ds = train_ds.repeat()
@@ -102,9 +100,7 @@ def nbody_dataset(
         norm_conditioning=norm_conditioning,
     )
     ds = make_dataloader(
-        x,
-        conditioning,
-        mask,
+        (x, conditioning, mask),
         batch_size,
         seed,
         shuffle=shuffle,
