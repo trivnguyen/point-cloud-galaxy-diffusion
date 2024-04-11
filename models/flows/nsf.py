@@ -94,8 +94,8 @@ class NeuralSplineFlow(nn.Module):
 
         # initialize the model
         key = jax.random.PRNGKey(42)
-        x_dummy = jax.random.uniform(key=key, shape=(64, config.flows.n_dim))
-        theta_dummy = jax.random.uniform(key=key, shape=(64, config.flows.n_context))
+        x_dummy = jax.random.uniform(key=key, shape=(64, config.flows.n_context))
+        theta_dummy = jax.random.uniform(key=key, shape=(64, config.flows.n_dim))
         params = model.init(key, theta_dummy, x_dummy)
 
         schedule = optax.warmup_cosine_decay_schedule(
@@ -143,11 +143,18 @@ class NeuralSplineFlow(nn.Module):
         # for a total of `3 * num_bins + 1` parameters
         num_bijector_params = 3 * self.n_bins + 1
 
-        self.conditioner = [Conditioner(event_shape=event_shape, context_shape=context_shape, hidden_dims=self.hidden_dims, num_bijector_params=num_bijector_params, activation=self.activation, name="conditioner_{}".format(i)) for i in range(self.n_transforms)]
+        self.conditioner = [
+            Conditioner(
+                event_shape=event_shape, context_shape=context_shape, hidden_dims=self.hidden_dims,
+                num_bijector_params=num_bijector_params, activation=self.activation,
+                name="conditioner_{}".format(i)
+                ) for i in range(self.n_transforms)
+            ]
 
         bijectors = []
         for i in range(self.n_transforms):
-            bijectors.append(MaskedCouplingConditional(mask=mask, bijector=bijector_fn, conditioner=self.conditioner[i]))
+            bijectors.append(
+                MaskedCouplingConditional(mask=mask, bijector=bijector_fn, conditioner=self.conditioner[i]))
             mask = jnp.logical_not(mask)  # Flip the mask after each layer
 
         self.bijector = InverseConditional(ChainConditional(bijectors))
