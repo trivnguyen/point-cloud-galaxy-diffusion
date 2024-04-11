@@ -57,10 +57,21 @@ def infer(config: ConfigDict):
     )
     x = x * norm_dict['std'] + norm_dict['mean']
 
-    num_conditioning = len(config.data.conditioning_parameters)
     num_flows_conditioning = len(config.data.flows_conditioning_parameters)
     num_flows_labels = len(config.data.flows_labels)
 
+    # find where the index of log_num_subhalos or num_subhalos is in the labels
+    log_num_subhalos_idx = config.data.flows_labels.index('log_num_subhalos')
+
+    # check if the conditioning parameters include any flow labels
+    # if so, get the index of the flow label in the conditioning parameters
+    flows_to_condition = []
+    condition_to_flows = []
+    for i, label in enumerate(config.data.flows_labels):
+        if label in config.data.conditioning_parameters:
+            condition_to_flows.append(config.data.conditioning_parameters.index(label))
+            flows_to_condition.append(i)
+    print(flows_to_condition, condition_to_flows)
 
     # load the VDM and the normalizing flows
     logging.info("Loading the VDM and the normalizing flows...")
@@ -88,8 +99,8 @@ def infer(config: ConfigDict):
 
     # Iterate over the entire dataset and start generation
     dset = datasets.make_dataloader(
-        (x, conditioning, flows_conditioning, mask), batch_size=batch_size,
-        seed=42, shuffle=False, repeat=False)
+        (x, conditioning, flows_conditioning, mask), batch_size=config.batch_size,
+        seed=config.seed, shuffle=False, repeat=False)
     dset = create_input_iter(dset)
 
     truth_samples = []
@@ -102,10 +113,10 @@ def infer(config: ConfigDict):
 
     for batch in tqdm(dset):
         x_batch, cond_batch, flows_cond_batch, mask_batch = batch
-        x_batch = jnp.repeat(x_batch[0], num_repeats, axis=0)
-        cond_batch = jnp.repeat(cond_batch[0], num_repeats, axis=0)
-        flows_cond_batch = jnp.repeat(flows_cond_batch[0], num_repeats, axis=0)
-        truth_mask_batch = jnp.repeat(mask_batch[0], num_repeats, axis=0)
+        x_batch = jnp.repeat(x_batch[0], config.n_repeats, axis=0)
+        cond_batch = jnp.repeat(cond_batch[0], config.n_repeats, axis=0)
+        flows_cond_batch = jnp.repeat(flows_cond_batch[0], config.n_repeats, axis=0)
+        truth_mask_batch = jnp.repeat(mask_batch[0], config.n_repeats, axis=0)
 
         # generate the flow samples
         flows_samples_batch = sample_from_flow(
@@ -118,9 +129,9 @@ def infer(config: ConfigDict):
 
         # get the total number of particles
         num_subhalos = 10**flows_samples_batch[..., log_num_subhalos_idx]
-        num_subhalos = jnp.clip(num_subhalos, 1, num_particles)
+        num_subhalos = jnp.clip(num_subhalos, 1, config.n_partciles)
         num_subhalos = jnp.round(num_subhalos).astype(jnp.int32)
-        vdm_mask_batch = create_mask(num_subhalos, num_particles)
+        vdm_mask_batch = create_mask(num_subhalos, config.n_partciles)
 
         # get the new conditioning vector
         if len(flows_to_condition) > 0:
@@ -173,8 +184,7 @@ def infer(config: ConfigDict):
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     logging.info("Saving the generated samples to %s", output_path)
     np.savez(
-        output_path, samples=vdm_samples, cond=vdm_cond, mask=vdm_mask,
-        flows_samples=flows_samples, flows_cond=flows_cond,
+        output_path, samples=gen_samples, cond=gen_cond, mask=gen_mask,
         truth=truth_samples, truth_mask=truth_mask
     )
 
