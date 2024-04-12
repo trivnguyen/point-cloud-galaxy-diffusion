@@ -46,14 +46,16 @@ def infer(config: ConfigDict):
         config.data.dataset_name,
         config.data.n_features,
         config.data.n_particles,
-        conditioning_parameters=config.data.conditioning_parameters
+        conditioning_parameters=config.data.conditioning_parameters,
+        norm_conditioning=config.data.norm_conditioning,
     )
     _, _, flows_conditioning, flows_norm_dict = datasets.get_nbody_data(
         config.data.dataset_root,
         config.data.dataset_name,
         config.data.n_features,
         config.data.n_particles,
-        conditioning_parameters=config.data.flows_conditioning_parameters + config.data.flows_labels
+        conditioning_parameters=config.data.flows_conditioning_parameters + config.data.flows_labels,
+        norm_conditioning=config.data.norm_conditioning,
     )
     x = x * norm_dict['std'] + norm_dict['mean']
 
@@ -103,6 +105,7 @@ def infer(config: ConfigDict):
     dset = create_input_iter(dset)
 
     truth_samples = []
+    truth_cond = []
     truth_mask = []
     vdm_samples = []
     vdm_cond = []
@@ -113,14 +116,16 @@ def infer(config: ConfigDict):
     for batch in tqdm(dset):
         x_batch, cond_batch, flows_cond_batch, mask_batch = batch
         x_batch = jnp.repeat(x_batch[0], config.n_repeats, axis=0)
-        cond_batch = jnp.repeat(cond_batch[0], config.n_repeats, axis=0)
+        truth_cond_batch = jnp.repeat(cond_batch[0], config.n_repeats, axis=0)
+        vdm_cond_batch = truth_cond_batch.copy()
         flows_cond_batch = jnp.repeat(flows_cond_batch[0], config.n_repeats, axis=0)
         truth_mask_batch = jnp.repeat(mask_batch[0], config.n_repeats, axis=0)
+        num_batch = len(flow_cond_batch)
 
         # generate the flow samples
         flows_samples_batch = sample_from_flow(
             flows_cond_batch[:, :num_flows_conditioning], 1,
-            jax.random.split(rng, len(cond_batch))).squeeze()
+            jax.random.split(rng, num_batch)).squeeze()
 
         flows_labels_std = flows_norm_dict['cond_std'][num_flows_conditioning:]
         flows_labels_mean = flows_norm_dict['cond_mean'][num_flows_conditioning:]
@@ -135,37 +140,45 @@ def infer(config: ConfigDict):
         # get the new conditioning vector
         if len(flows_to_condition) > 0:
             # make sure that the normalization is working correctly
-            cond_batch = cond_batch * norm_dict['cond_std'] + norm_dict['cond_mean']
-            cond_batch = cond_batch.at[:, condition_to_flows].set(
+            vdm_cond_batch = vdm_cond_batch * norm_dict['cond_std'] + norm_dict['cond_mean']
+            vdm_cond_batch = vdm_cond_batch.at[:, condition_to_flows].set(
                 flows_samples_batch[:, flows_to_condition])
-            cond_batch = (cond_batch - norm_dict['cond_mean']) / norm_dict['cond_std']
+            vdm_cond_batch = (vdm_cond_batch - norm_dict['cond_mean']) / norm_dict['cond_std']
 
-        vdm_samples.append(
-            eval.generate_samples(
+        vdm_samples_batch = eval.generate_samples(
                 vdm=vdm,
                 params=vdm_params,
                 rng=rng,
-                n_samples=len(cond_batch),
+                n_samples=num_batch,
                 n_particles=config.data.n_particles,
-                conditioning=cond_batch,
+                conditioning=vdm_cond_batch,
                 mask=vdm_mask_batch,
                 steps=config.steps,
                 norm_dict=norm_dict,
                 boxsize=1,  # doesn't matter
             )
-        )
+
+        # denormalize the conditioning vector
+        truth_cond_batch = truth_cond_batch * norm_dict['cond_std'] + norm_dict['cond_mean']
+        vdm_cond_batch = vdm_cond_batch * norm_dict['cond_std'] + norm_dict['cond_mean']
+        flows_cond_batch = flows_cond_batch * flows_norm_dict['cond_std'] + flows_norm_dict['cond_mean']
+
+        # store data
+        vdm_samples.append(vdm_samples_batch)
         vdm_mask.append(vdm_mask_batch)
-        vdm_cond.append(cond_batch)
+        vdm_cond.append(vdm_cond_batch)
         truth_samples.append(x_batch)
+        truth_cond.append(truth_cond_batch)
         truth_mask.append(truth_mask_batch)
-        flows_cond.append(flows_cond_batch)
         flows_samples.append(flows_samples_batch)
+        flows_cond.append(flows_cond_batch)
 
     vdm_samples = jnp.concatenate(vdm_samples, axis=0)
     vdm_mask = jnp.concatenate(vdm_mask, axis=0)
     vdm_cond = jnp.concatenate(vdm_cond, axis=0)
     truth_samples = jnp.concatenate(truth_samples, axis=0)
     truth_mask = jnp.concatenate(truth_mask, axis=0)
+    truth_cond = jnp.concatenate(truth_cond, axis=0)
     flows_samples = jnp.concatenate(flows_samples, axis=0)
     flows_cond = jnp.concatenate(flows_cond, axis=0)
 
@@ -184,8 +197,8 @@ def infer(config: ConfigDict):
     logging.info("Saving the generated samples to %s", output_path)
     np.savez(
         output_path, samples=vdm_samples, cond=vdm_cond, mask=vdm_mask,
-        flows_samples=flows_samples, flows_cond=flows_cond,
-        truth=truth_samples, truth_mask=truth_mask
+        truth=truth_samples, truth_cond=truth_cond, truth_mask=truth_mask,
+        flows_samples=flows_samples, flows_cond=flows_cond
     )
 
 if __name__ == "__main__":
