@@ -23,7 +23,7 @@ def get_config():
     config.data = data = ml_collections.ConfigDict()
     data.dataset_root = "/mnt/ceph/users/tnguyen/dark_camels/" \
         "point-cloud-diffusion-datasets/processed_datasets/"
-    data.dataset_name = "mw_zooms-wdm-dmprop/nmax100-vmaxtilde-pad"
+    data.dataset_name = "mw_zooms-wdm-dmprop/nmax100-vmaxtilde-pad-v2"
     data.n_particles = 100  # Select the first n_particles particles
     data.n_features = 8  # Select the first n_features features
     data.n_pos_features = 3
@@ -32,7 +32,10 @@ def get_config():
     data.add_rotations = True
     data.add_translations = False
     data.conditioning_parameters = [
-        "halo_mvir", "inv_wdm_mass", "log_sn1", "log_sn2", "log_agn1"] # Parameters to condition on
+        "halo_mvir", "inv_wdm_mass", "log_sn1", "log_sn2", "log_agn1"]
+    data.flow_conditioning_parameters = [
+
+    ]
     data.kwargs = {}
 
     # Flows model for number of particles
