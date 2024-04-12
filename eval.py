@@ -17,7 +17,7 @@ from ml_collections.config_dict import ConfigDict
 from pycorr import TwoPointCorrelationFunction
 from models.diffusion_utils import generate
 from models.train_utils import create_input_iter
-from inference.likelihood import elbo
+from models.likelihood import elbo
 from datasets import nbody_dataset
 from scipy.interpolate import interp1d
 from scipy.stats import chi2

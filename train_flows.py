@@ -88,9 +88,9 @@ def train_flows(
         logdir=workdir, just_logging=jax.process_index() != 0
     )
     # Load the dataset
-    conditioning_parameters = config.data.flow_conditioning_parameters + config.data.flow_labels
-    n_condition = len(config.data.flow_conditioning_parameters)
-    n_labels = len(config.data.flow_labels)
+    conditioning_parameters = config.data.flow_conditioning_parameters + config.data.flows_labels
+    n_condition = len(config.data.flows_conditioning_parameters)
+    n_labels = len(config.data.flows_labels)
     train_ds, norm_dict = load_data(
         config.data.dataset_root,
         config.data.dataset_name,

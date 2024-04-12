@@ -110,6 +110,7 @@ def infer(config: ConfigDict):
     vdm_samples = []
     vdm_cond = []
     vdm_mask = []
+    truth_flows_samples = []
     flows_samples = []
     flows_cond = []
 
@@ -120,7 +121,7 @@ def infer(config: ConfigDict):
         vdm_cond_batch = truth_cond_batch.copy()
         flows_cond_batch = jnp.repeat(flows_cond_batch[0], config.n_repeats, axis=0)
         truth_mask_batch = jnp.repeat(mask_batch[0], config.n_repeats, axis=0)
-        num_batch = len(flow_cond_batch)
+        num_batch = len(flows_cond_batch)
 
         # generate the flow samples
         flows_samples_batch = sample_from_flow(
@@ -133,7 +134,7 @@ def infer(config: ConfigDict):
 
         # get the total number of particles
         num_subhalos = 10**flows_samples_batch[..., log_num_subhalos_idx]
-        num_subhalos = jnp.clip(num_subhalos, 1, config.data.n_particles)
+        # num_subhalos = jnp.clip(num_subhalos, 1, config.data.n_particles)
         num_subhalos = jnp.round(num_subhalos).astype(jnp.int32)
         vdm_mask_batch = create_mask(num_subhalos, config.data.n_particles)
 
@@ -164,21 +165,25 @@ def infer(config: ConfigDict):
         flows_cond_batch = flows_cond_batch * flows_norm_dict['cond_std'] + flows_norm_dict['cond_mean']
 
         # store data
-        vdm_samples.append(vdm_samples_batch)
-        vdm_mask.append(vdm_mask_batch)
-        vdm_cond.append(vdm_cond_batch)
         truth_samples.append(x_batch)
         truth_cond.append(truth_cond_batch)
         truth_mask.append(truth_mask_batch)
+        vdm_samples.append(vdm_samples_batch)
+        vdm_mask.append(vdm_mask_batch)
+        vdm_cond.append(vdm_cond_batch)
+
+        truth_flows_samples.append(flows_cond_batch[:, num_flows_conditioning:])
         flows_samples.append(flows_samples_batch)
         flows_cond.append(flows_cond_batch)
 
-    vdm_samples = jnp.concatenate(vdm_samples, axis=0)
-    vdm_mask = jnp.concatenate(vdm_mask, axis=0)
-    vdm_cond = jnp.concatenate(vdm_cond, axis=0)
+
     truth_samples = jnp.concatenate(truth_samples, axis=0)
     truth_mask = jnp.concatenate(truth_mask, axis=0)
     truth_cond = jnp.concatenate(truth_cond, axis=0)
+    vdm_samples = jnp.concatenate(vdm_samples, axis=0)
+    vdm_mask = jnp.concatenate(vdm_mask, axis=0)
+    vdm_cond = jnp.concatenate(vdm_cond, axis=0)
+    truth_flows_samples = jnp.concatenate(truth_flows_samples, axis=0)
     flows_samples = jnp.concatenate(flows_samples, axis=0)
     flows_cond = jnp.concatenate(flows_cond, axis=0)
 
@@ -198,7 +203,7 @@ def infer(config: ConfigDict):
     np.savez(
         output_path, samples=vdm_samples, cond=vdm_cond, mask=vdm_mask,
         truth=truth_samples, truth_cond=truth_cond, truth_mask=truth_mask,
-        flows_samples=flows_samples, flows_cond=flows_cond
+        truth_flows_samples=truth_flows_samples, flows_samples=flows_samples, flows_cond=flows_cond
     )
 
 if __name__ == "__main__":

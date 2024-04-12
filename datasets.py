@@ -15,7 +15,6 @@ from models.graph_utils import get_rotated_box
 
 EPS = 1e-7
 
-
 def make_dataloader(data, batch_size, seed=None, shuffle=True, repeat=True):
     n_train = len(data[0])
 
@@ -60,8 +59,12 @@ def get_nbody_data(
     if norm_dict is None:
         x_mean = x.mean(axis=(0, 1))
         x_std = x.std(axis=(0, 1))
-        cond_mean = conditioning.mean(axis=0)
-        cond_std = conditioning.std(axis=0)
+        if norm_conditioning:
+            cond_mean = conditioning.mean(axis=0)
+            cond_std = conditioning.std(axis=0)
+        else:
+            cond_mean = 0
+            cond_std = 1
         norm_dict = {
             "mean": x_mean, "std": x_std,
             "cond_mean": cond_mean, "cond_std": cond_std,
