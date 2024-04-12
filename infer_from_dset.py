@@ -71,7 +71,6 @@ def infer(config: ConfigDict):
         if label in config.data.conditioning_parameters:
             condition_to_flows.append(config.data.conditioning_parameters.index(label))
             flows_to_condition.append(i)
-    print(flows_to_condition, condition_to_flows)
 
     # load the VDM and the normalizing flows
     logging.info("Loading the VDM and the normalizing flows...")
@@ -129,9 +128,9 @@ def infer(config: ConfigDict):
 
         # get the total number of particles
         num_subhalos = 10**flows_samples_batch[..., log_num_subhalos_idx]
-        num_subhalos = jnp.clip(num_subhalos, 1, config.n_partciles)
+        num_subhalos = jnp.clip(num_subhalos, 1, config.data.n_particles)
         num_subhalos = jnp.round(num_subhalos).astype(jnp.int32)
-        vdm_mask_batch = create_mask(num_subhalos, config.n_partciles)
+        vdm_mask_batch = create_mask(num_subhalos, config.data.n_particles)
 
         # get the new conditioning vector
         if len(flows_to_condition) > 0:
@@ -147,10 +146,10 @@ def infer(config: ConfigDict):
                 params=vdm_params,
                 rng=rng,
                 n_samples=len(cond_batch),
-                n_particles=num_particles,
+                n_particles=config.data.n_particles,
                 conditioning=cond_batch,
                 mask=vdm_mask_batch,
-                steps=steps,
+                steps=config.steps,
                 norm_dict=norm_dict,
                 boxsize=1,  # doesn't matter
             )
@@ -184,7 +183,8 @@ def infer(config: ConfigDict):
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     logging.info("Saving the generated samples to %s", output_path)
     np.savez(
-        output_path, samples=gen_samples, cond=gen_cond, mask=gen_mask,
+        output_path, samples=vdm_samples, cond=vdm_cond, mask=vdm_mask,
+        flows_samples=flows_samples, flows_cond=flows_cond,
         truth=truth_samples, truth_mask=truth_mask
     )
 
