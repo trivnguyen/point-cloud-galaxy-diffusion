@@ -130,12 +130,17 @@ def get_timestep_embedding(timesteps, embedding_dim: int, dtype=np.float32):
 
 def loss_vdm(params, model, rng, x, conditioning=None, mask=None, beta=1.0):
     """Compute the loss for a VDM model, sum of diffusion, latent, and reconstruction losses, appropriately masked."""
-    loss_diff, loss_klz, loss_recon = model.apply(params, x, conditioning, mask, rngs={"sample": rng})
+    loss_diff, loss_klz, loss_recon, loss_recon_mass = model.apply(
+        params, x, conditioning, mask, rngs={"sample": rng})
 
     if mask is None:
         mask = np.ones(x.shape[:-1])
 
-    loss_batch = (((loss_diff + loss_klz) * mask[:, :, None]).sum((-1, -2)) / beta + (loss_recon * mask[:, :, None]).sum((-1, -2))) / mask.sum(-1)
+    loss_batch = (
+        ((loss_diff + loss_klz) * mask[:, :, None]).sum((-1, -2)) / beta +
+        (loss_recon * mask[:, :, None]).sum((-1, -2)) +
+        (loss_recon_mass).sum(-1)
+    ) / mask.sum(-1)
     return loss_batch.mean()
 
 

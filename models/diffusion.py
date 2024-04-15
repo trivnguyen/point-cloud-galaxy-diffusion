@@ -41,6 +41,7 @@ class VariationalDiffusionModel(nn.Module):
       antithetic_time_sampling: Antithetic time sampling to reduce variance.
       noise_schedule: Noise schedule; "learned_linear", "linear", or "learned_net"
       noise_scale: Std of Normal noise model.
+      noise_mass_scale: Std of Normal noise model for mass.
       d_t_embedding: Dimensions the timesteps are embedded to.
       score: Score function; "transformer", "graph".
       score_dict: Dict of score arguments (see scores.py docstrings).
@@ -49,6 +50,7 @@ class VariationalDiffusionModel(nn.Module):
       use_encdec: Whether to use an encoder-decoder for latent diffusion.
       norm_dict: Dict of normalization arguments (see datasets.py docstrings).
       n_pos_features: Number of positional features, for graph-building etc.
+      n_mass_features: Number of mass features.
       scale_non_linear_init: Whether to scale the initialization of the non-linear layers in the noise model.
     """
 
@@ -59,6 +61,7 @@ class VariationalDiffusionModel(nn.Module):
     antithetic_time_sampling: bool = True
     noise_schedule: str = "linear"  # "linear", "learned_linear", or "learned_net"
     noise_scale: float = 1.0e-3
+    noise_mass_scale: float = 1.0e-3
     d_t_embedding: int = 32
     score: str = "transformer"  # "transformer", "graph"
     score_dict: dict = dataclasses.field(
@@ -83,6 +86,8 @@ class VariationalDiffusionModel(nn.Module):
         default_factory=lambda: {"x_mean": 0.0, "x_std": 1.0, "box_size": 1000.0}
     )
     n_pos_features: int = 3
+    n_vel_features: int = 3
+    n_mass_features: int = 1
     scale_non_linear_init: bool = False
 
     @classmethod
@@ -125,6 +130,8 @@ class VariationalDiffusionModel(nn.Module):
             {"x_mean": x_mean, "x_std": x_std, "box_size": config.data.box_size}
         )
         n_pos_features = config.score.get("n_pos_features", 3)
+        n_vel_features = config.score.get("n_vel_features", 3)
+        n_mass_features = config.score.get("n_mass_features", 1)
         vdm = VariationalDiffusionModel(
             d_feature=config.data.n_features,
             timesteps=config.vdm.timesteps,
@@ -132,6 +139,7 @@ class VariationalDiffusionModel(nn.Module):
             gamma_max=config.vdm.gamma_max,
             noise_schedule=config.vdm.noise_schedule,
             noise_scale=config.vdm.noise_scale,
+            noise_mass_scale=config.vdm.noise_mass_scale,
             d_t_embedding=config.vdm.d_t_embedding,
             score=config.score.score,
             score_dict=score_dict,
@@ -143,6 +151,8 @@ class VariationalDiffusionModel(nn.Module):
             use_encdec=config.vdm.use_encdec,
             norm_dict=norm_dict_input,
             n_pos_features=n_pos_features,
+            n_vel_features=n_vel_features,
+            n_mass_features=n_mass_features,
             # scale_non_linear_init = config.vdm.scale_non_linear_init,
         )
         rng = jax.random.PRNGKey(42)
@@ -264,7 +274,32 @@ class VariationalDiffusionModel(nn.Module):
         z_0 = variance_preserving_map(f, g_0, eps_0)
         z_0_rescaled = z_0 / alpha(g_0)
         loss_recon = -self.decode(z_0_rescaled, cond).log_prob(x)
+
         return loss_recon
+
+    def recon_mass_loss(self, x, f, cond):
+        """ Additional term to the recon_loss that enforces mass conservation. """
+        g_0 = self.gamma(0.0)
+        eps_0 = jax.random.normal(self.make_rng("sample"), shape=f.shape)
+        z_0 = variance_preserving_map(f, g_0, eps_0)
+        z_0_rescaled = z_0 / alpha(g_0)
+
+        # calculate the mass of the input and the output
+        # get the mass index
+        m_idx_start = self.n_pos_features + self.n_vel_features
+        m_idx_end = m_idx_start + self.n_mass_features
+        logm_scale = np.array(self.norm_dict['x_std'][m_idx_start:m_idx_end])
+        logm_x = x[..., m_idx_start:m_idx_end] * logm_scale
+        logm_z0 = z_0_rescaled[..., m_idx_start:m_idx_end] * logm_scale
+
+        # calculate the total mass
+        logm_x_total = np.log10((10**logm_x).sum((-2)))
+        logm_z0_total = np.log10((10**logm_z0).sum((-2)))
+
+        loss_recon_mass = -tfd.Normal(
+            loc=logm_z0_total, scale=self.noise_mass_scale).log_prob(logm_x_total)
+
+        return loss_recon_mass
 
     def latent_loss(self, f):
         """The latent loss measures the gap in the last step, this is the KL
@@ -331,11 +366,14 @@ class VariationalDiffusionModel(nn.Module):
         T = self.timesteps
         if T > 0:
             t = np.ceil(t * T) / T
-
         cond = self.embed(conditioning)
         loss_diff = self.diffusion_loss(t, f, cond, mask)
 
-        return (loss_diff, loss_klz, loss_recon)
+        # 4. Mass reconstruction loss
+        f = self.encode(x, conditioning)
+        loss_recon_mass = self.recon_mass_loss(x, f, conditioning)
+
+        return (loss_diff, loss_klz, loss_recon, loss_recon_mass)
 
     def embed(self, conditioning):
         """Embed the conditioning vector, optionally including embedding a class assumed to be the first element of the context vector."""

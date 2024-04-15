@@ -103,6 +103,7 @@ def train(
         timesteps=config.vdm.timesteps,
         noise_schedule=config.vdm.noise_schedule,
         noise_scale=config.vdm.noise_scale,
+        noise_mass_scale=config.vdm.noise_mass_scale,
         d_t_embedding=config.vdm.d_t_embedding,
         gamma_min=config.vdm.gamma_min,
         gamma_max=config.vdm.gamma_max,
@@ -115,6 +116,9 @@ def train(
         encoder_dict=encoder_dict,
         decoder_dict=decoder_dict,
         norm_dict=norm_dict_input,
+        n_pos_features=config.data.n_pos_features,
+        n_vel_features=config.data.n_vel_features,
+        n_mass_features=config.data.n_mass_features,
     )
 
     rng = jax.random.PRNGKey(config.seed)
